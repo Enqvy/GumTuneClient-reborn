@@ -117,7 +117,6 @@ public class ESPs {
 
     @SubscribeEvent
     public void onRenderEntityLiving(RenderLivingEntityEvent event) {
-        if (LocationUtils.currentIsland == null) return;
         if (checked.contains(event.entity)) return;
         if (!GumTuneClientConfig.ESPs) return;
         if (event.entity instanceof EntityArmorStand) {
@@ -199,7 +198,8 @@ public class ESPs {
                 String name = event.entity.getName();
                 if (name.equals("Team Treasurite")) {
                     highlightEntity(event.entity, "Team Treasurite", Color.CYAN.getRGB());
-                } else if (name.equals("Murderlover") || name.equals("Goblin") || name.equals("Weakling") || name.equals("Pitfighter")) {
+                }
+                if (name.equals("Murderlover") || name.equals("Goblin") || name.equals("Weakling") || name.equals("Pitfighter")) {
                     highlightEntity(event.entity, "Goblin", new Color(0, 100, 0).getRGB());
                 }
             } else if (event.entity instanceof EntityIronGolem) {
@@ -228,10 +228,11 @@ public class ESPs {
                 }
             }
             if (highlightedEntityBlocks.containsKey(entity)) {
-                BlockPos blockPos = highlightedEntityBlocks.get(entity).getBlockPos();
+                HighlightBlock highlightBlock = highlightedEntityBlocks.get(entity);
+                BlockPos blockPos = highlightBlock.getBlockPos();
                 if (blockPos != null) {
-                    RenderUtils.renderEspBox(blockPos, event.partialTicks, highlightedEntities.get(entity).getColor());
-                    RenderUtils.renderWaypointText(highlightedEntityBlocks.get(entity).getName(), blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5, event.partialTicks);
+                    RenderUtils.renderEspBox(blockPos, event.partialTicks, GumTuneClientConfig.espColor.getRGB());
+                    RenderUtils.renderWaypointText(highlightBlock.getName(), blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5, event.partialTicks);
                 }
             }
         });
