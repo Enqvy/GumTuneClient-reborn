@@ -18,9 +18,6 @@
 
 ### GumTuneClient-Reborn
 <sup>*Continuation of GumTuneClient / RoseGoldAddons v2*</sup>
-
-(rest of features...)
-
 ---
 
 ## Credits
