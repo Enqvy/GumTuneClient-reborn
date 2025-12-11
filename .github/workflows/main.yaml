@@ -36,4 +36,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="v${{ env.PROJECT_VERSION }}"
-          gh release create "$TAG_NAME" build/libs/*.jar --title "$TAG_NAME" --notes "${{ github.event.head_commit.message }}"
+          gh release create "$TAG_NAME" artifacts/*.jar --title "$TAG_NAME" --notes "${{ github.event.head_commit.message }}"
