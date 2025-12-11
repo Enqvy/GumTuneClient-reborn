@@ -12,14 +12,19 @@ import rosegold.gumtuneclient.utils.RaytracingUtils;
 import rosegold.gumtuneclient.utils.VectorUtils;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.PriorityQueue;
 
 public class AStarCustomPathfinder {
     private final Vec3 startVec3;
     private final Vec3 endVec3;
     private ArrayList<Vec3> path = new ArrayList<>();
-    private final ArrayList<Hub> hubs = new ArrayList<>();
-    private final ArrayList<Hub> hubsToWork = new ArrayList<>();
+    // Optimization: Use HashMap for o(1) lookups instead of looping through lists
+    private final HashMap<BlockPos, Hub> hubs = new HashMap<>();
+    // Optimization: Use PriorityQueue for o(1) sorting
+    private final PriorityQueue<Hub> hubsToWork = new PriorityQueue<>(new CompareHub());
     private final double minDistanceSquared;
     public static long counter = 0;
 
@@ -45,41 +50,51 @@ public class AStarCustomPathfinder {
     }
 
     public void compute(int loops, int depth) {
+        long startTime = System.currentTimeMillis();
         counter = 0;
         PathFinding.renderHubs.clear();
         path.clear();
         hubsToWork.clear();
-        ArrayList<Vec3> initPath = new ArrayList<>();
-        initPath.add(startVec3);
-        hubsToWork.add(new Hub(startVec3, null, initPath, startVec3.squareDistanceTo(endVec3), 0.0, 0.0));
+        hubs.clear();
+
+        Hub startHub = new Hub(startVec3, null, startVec3.distanceTo(endVec3), 0.0, 0.0);
+        hubsToWork.add(startHub);
+        hubs.put(new BlockPos(startVec3), startHub);
+
         search:
-        for (int i = 0; i < loops; ++i) {
-            hubsToWork.sort(new CompareHub());
-            int j = 0;
-            if (hubsToWork.size() == 0) {
-                break;
+        while (!hubsToWork.isEmpty()) {
+            // Safety break
+            if (System.currentTimeMillis() - startTime > 1000) break;
+
+            Hub hub = hubsToWork.poll();
+            
+            PathFinding.renderHubs.add(new BlockPos(VectorUtils.ceilVec(hub.getLoc())));
+
+            if (checkGoal(hub.getLoc())) {
+                path = hub.getPath();
+                break search;
             }
-            for (Hub hub : new ArrayList<>(hubsToWork)) {
-                if (++j > depth) {
-                    break;
-                }
 
-                hubsToWork.remove(hub);
-                hubs.add(hub);
-
-                PathFinding.renderHubs.add(new BlockPos(VectorUtils.ceilVec(hub.getLoc())));
-
-                for (BlockPos blockPos : RaytracingUtils.getAllTeleportableBlocksNew(VectorUtils.ceilVec(hub.getLoc()).addVector(0.5, 1.62 - 0.08 + 1, 0.5), 16)) {
-                    Vec3 loc = new Vec3(blockPos);
-                    if (addHub(hub, loc, 0)) {
-                        break search;
-                    }
+            for (BlockPos blockPos : RaytracingUtils.getAllTeleportableBlocksNew(VectorUtils.ceilVec(hub.getLoc()).addVector(0.5, 1.62 - 0.08 + 1, 0.5), 16)) {
+                Vec3 loc = new Vec3(blockPos);
+                // Calculate actual distance cost for A*
+                double cost = hub.getLoc().distanceTo(loc);
+                if (addHub(hub, loc, cost)) {
+                    break search;
                 }
             }
         }
-        ModUtils.sendMessage("Done calculating path, searched " + PathFinding.renderHubs.size() + " blocks, took: " + counter + "ms with an average of " + Math.round((double) counter / PathFinding.renderHubs.size() * 100) / 100 + "ms per block");
-        hubs.sort(new CompareHub());
-        path = hubs.get(0).getPath();
+        
+        counter = System.currentTimeMillis() - startTime;
+        ModUtils.sendMessage("Done calculating path, searched " + hubs.size() + " blocks, took: " + counter + "ms");
+    }
+
+    // Helper for checking goal
+    private boolean checkGoal(Vec3 loc) {
+         if (minDistanceSquared != 0.0 && loc.squareDistanceTo(endVec3) <= minDistanceSquared) return true;
+         return (int)loc.xCoord == (int)endVec3.xCoord && 
+                (int)loc.yCoord == (int)endVec3.yCoord && 
+                (int)loc.zCoord == (int)endVec3.zCoord;
     }
 
     public static boolean checkPositionValidity(Vec3 loc) {
@@ -105,43 +120,38 @@ public class AStarCustomPathfinder {
     }
 
     public Hub isHubExisting(Vec3 loc) {
-        for (Hub hub : hubs) {
-            if (hub.getLoc().xCoord == loc.xCoord && hub.getLoc().yCoord == loc.yCoord && hub.getLoc().zCoord == loc.zCoord) {
-                return hub;
-            }
-        }
-        for (Hub hub : hubsToWork) {
-            if (hub.getLoc().xCoord == loc.xCoord && hub.getLoc().yCoord == loc.yCoord && hub.getLoc().zCoord == loc.zCoord) {
-                return hub;
-            }
-        }
-        return null;
+        return hubs.get(new BlockPos(loc));
     }
 
     public boolean addHub(Hub parent, Vec3 loc, double cost) {
         Hub existingHub = isHubExisting(loc);
         double totalCost = cost;
         if (parent != null) {
-            totalCost += parent.getTotalCost();
+            totalCost += parent.getTotalCost(); // Accumulate G-Cost
         }
+        
+        if (checkGoal(loc)) {
+            Hub goal = new Hub(loc, parent, 0, cost, totalCost);
+            path = goal.getPath();
+            return true;
+        }
+
         if (existingHub == null) {
-            if ((loc.xCoord == endVec3.xCoord && loc.yCoord == endVec3.yCoord && loc.zCoord == endVec3.zCoord) || (minDistanceSquared != 0.0 && loc.squareDistanceTo(endVec3) <= minDistanceSquared)) {
-                path.clear();
-                (path = parent.getPath()).add(loc);
-                return true;
-            }
-            ArrayList<Vec3> path = new ArrayList<>(parent.getPath());
-            path.add(loc);
-            hubsToWork.add(new Hub(loc, parent, path, loc.squareDistanceTo(endVec3), cost, totalCost));
-        } else if (existingHub.getCost() > cost) {
-            ArrayList<Vec3> path = new ArrayList<>(parent.getPath());
-            path.add(loc);
+            // H-Cost (Heuristic) is distance to end
+            double distToTarget = loc.distanceTo(endVec3);
+            Hub newHub = new Hub(loc, parent, distToTarget, cost, totalCost);
+            hubs.put(new BlockPos(loc), newHub);
+            hubsToWork.add(newHub);
+        } else if (totalCost < existingHub.getTotalCost()) {
+            // Found a shorter path to an existing node
             existingHub.setLoc(loc);
             existingHub.setParent(parent);
-            existingHub.setPath(path);
-            existingHub.setSquareDistanceToFromTarget(loc.squareDistanceTo(endVec3));
             existingHub.setCost(cost);
             existingHub.setTotalCost(totalCost);
+            
+            // Re-sort priority queue
+            hubsToWork.remove(existingHub);
+            hubsToWork.add(existingHub);
         }
         return false;
     }
@@ -149,15 +159,14 @@ public class AStarCustomPathfinder {
     private static class Hub {
         private Vec3 loc;
         private Hub parent;
-        private ArrayList<Vec3> path;
-        private double squareDistanceToFromTarget;
+        // Optimization: Path list removed to save RAM. Reconstructed via parents.
+        private double squareDistanceToFromTarget; // H-Cost
         private double cost;
-        private double totalCost;
+        private double totalCost; // G-Cost
 
-        public Hub(Vec3 loc, Hub parent, ArrayList<Vec3> path, double squareDistanceToFromTarget, double cost, double totalCost) {
+        public Hub(Vec3 loc, Hub parent, double squareDistanceToFromTarget, double cost, double totalCost) {
             this.loc = loc;
             this.parent = parent;
-            this.path = path;
             this.squareDistanceToFromTarget = squareDistanceToFromTarget;
             this.cost = cost;
             this.totalCost = totalCost;
@@ -171,7 +180,15 @@ public class AStarCustomPathfinder {
             return parent;
         }
 
+        // Optimization: Reconstructs path backwards from parents
         public ArrayList<Vec3> getPath() {
+            ArrayList<Vec3> path = new ArrayList<>();
+            Hub current = this;
+            while(current != null) {
+                path.add(current.loc);
+                current = current.parent;
+            }
+            Collections.reverse(path);
             return path;
         }
 
@@ -189,10 +206,6 @@ public class AStarCustomPathfinder {
 
         public void setParent(Hub parent) {
             this.parent = parent;
-        }
-
-        public void setPath(ArrayList<Vec3> path) {
-            this.path = path;
         }
 
         public void setSquareDistanceToFromTarget(double squareDistanceToFromTarget) {
@@ -215,7 +228,11 @@ public class AStarCustomPathfinder {
     public static class CompareHub implements Comparator<Hub> {
         @Override
         public int compare(Hub o1, Hub o2) {
-            return (int) (o1.getSquareDistanceToFromTarget() + o1.getTotalCost() - (o2.getSquareDistanceToFromTarget() + o2.getTotalCost()));
+            // F-Cost = G (TotalCost) + H (DistanceToTarget)
+            return Double.compare(
+                o1.getTotalCost() + o1.getSquareDistanceToFromTarget(), 
+                o2.getTotalCost() + o2.getSquareDistanceToFromTarget()
+            );
         }
     }
 }
