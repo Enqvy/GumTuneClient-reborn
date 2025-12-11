@@ -32,4 +32,4 @@ jobs:
         run: |
           TAG_NAME="build-${{ github.run_number }}"
           COMMIT_MSG="${{ github.event.head_commit.message }}"
-          gh release create "$TAG_NAME" build/libs/*.jar --title "Build ${{ github.run_number }}" --notes "$COMMIT_MSG"
+          gh release create "$TAG_NAME" artifacts/*.jar --title "Build ${{ github.run_number }}" --notes "$COMMIT_MSG"
