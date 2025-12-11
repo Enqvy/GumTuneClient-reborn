@@ -2,10 +2,10 @@ name: GumTuneClient CI
 
 on:
   push:
-    branches: [ "main" ] # OR "master" (check which branch you use)
+    branches: [ "main" ] # OR "master"
 
 permissions:
-  contents: write # This is REQUIRED to allow the bot to create releases
+  contents: write
 
 jobs:
   build:
@@ -23,6 +23,11 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      - name: Get Version from gradle.properties
+        run: |
+          VER=$(grep "mod_version=" gradle.properties | cut -d'=' -f2)
+          echo "PROJECT_VERSION=$VER" >> $GITHUB_ENV
+
       - name: Build with Gradle
         run: ./gradlew build
 
@@ -30,6 +35,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="build-${{ github.run_number }}"
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          gh release create "$TAG_NAME" artifacts/*.jar --title "Build ${{ github.run_number }}" --notes "$COMMIT_MSG"
+          TAG_NAME="v${{ env.PROJECT_VERSION }}"
+          gh release create "$TAG_NAME" build/libs/*.jar --title "$TAG_NAME" --notes "${{ github.event.head_commit.message }}"
