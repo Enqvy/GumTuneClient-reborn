@@ -2,7 +2,7 @@ name: GumTuneClient CI
 
 on:
   push:
-    branches: [ "main" ] # OR "master"
+    branches: [ "main" ]
 
 permissions:
   contents: write
@@ -27,6 +27,16 @@ jobs:
         run: |
           VER=$(grep "mod_version=" gradle.properties | cut -d'=' -f2)
           echo "PROJECT_VERSION=$VER" >> $GITHUB_ENV
+          
+          # Count dots to determine release type
+          # 3+ dots (e.g., 0.7.7.1) = pre-release
+          # 2 dots (e.g., 0.7.7) = stable release
+          DOT_COUNT=$(echo "$VER" | tr -cd '.' | wc -c)
+          if [ "$DOT_COUNT" -ge 3 ]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_ENV
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_ENV
+          fi
 
       - name: Build with Gradle
         run: ./gradlew build
@@ -36,4 +46,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="v${{ env.PROJECT_VERSION }}"
-          gh release create "$TAG_NAME" artifacts/*.jar --title "$TAG_NAME" --notes "${{ github.event.head_commit.message }}"
+          PRERELEASE_FLAG=""
+          if [ "${{ env.IS_PRERELEASE }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create "$TAG_NAME" artifacts/*.jar --title "$TAG_NAME" --notes "${{ github.event.head_commit.message }}" $PRERELEASE_FLAG
